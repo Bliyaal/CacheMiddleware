@@ -72,7 +72,7 @@ namespace Bliyaal.CacheMiddleware
                 return method.GetCustomAttribute<CacheAttribute>() ?? attribute;
             }
 
-            return null;
+            return new CacheAttribute { CacheResult = false };
         }
 
         private Type GetControllerFromRouteData(RouteData routeData)
