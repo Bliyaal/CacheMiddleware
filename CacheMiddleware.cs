@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Internal;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
 using System;
@@ -6,6 +7,8 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace CacheMiddleware
@@ -88,6 +91,34 @@ namespace CacheMiddleware
             return null;
         }
 
+        private string GetKey(HttpContext context)
+        {
+            var path = Encoding.UTF8.GetBytes(context.Request.Path);
+            var method = Encoding.UTF8.GetBytes(context.Request.Method);
+            var body = GetRequestBodyData(context);
+            var uniqueData = new byte[path.Length + method.Length + body?.Length ?? 0];
+
+            path.CopyTo(uniqueData, 0);
+            method.CopyTo(uniqueData, path.Length);
+            body?.CopyTo(uniqueData, path.Length + method.Length);
+
+            var hash = GetHash(uniqueData);
+
+            var sb = new StringBuilder();
+            foreach (var b in hash)
+            {
+                sb.Append(b.ToString("X2"));
+            }
+
+            return sb.ToString();
+        }
+
+        private byte[] GetHash(byte[] uniqueData)
+        {
+            var sha256 = SHA256.Create();
+            return sha256.ComputeHash(uniqueData);
+        }
+
         private MethodInfo GetMethodFromRouteData(RouteData routeData, Type controller)
         {
             if (routeData != null && controller != null)
@@ -98,8 +129,7 @@ namespace CacheMiddleware
 
                 return controller.GetMethods()
                                  .First(m => m.IsPublic
-                                        && m.Name.Equals(methodName, StringComparison.CurrentCultureIgnoreCase)
-                                        && m.GetParameters().Count() == routeData.Values.Count() - 2);
+                                        && m.Name.Equals(methodName, StringComparison.CurrentCultureIgnoreCase));
 
             }
             return null;
@@ -109,12 +139,37 @@ namespace CacheMiddleware
         {
             return new MemoryCacheEntryOptions
             {
-                AbsoluteExpiration = attribute.AbsoluteExpiration > DateTime.MinValue ? attribute.AbsoluteExpiration : (DateTimeOffset?)null,
-                AbsoluteExpirationRelativeToNow = attribute.AbsoluteExpirationRelativeToNow > int.MinValue ? TimeSpan.FromSeconds(attribute.AbsoluteExpirationRelativeToNow) : (TimeSpan?)null,
+                AbsoluteExpiration = attribute.AbsoluteExpiration > DateTime.MinValue
+                                     ? attribute.AbsoluteExpiration
+                                     : (DateTimeOffset?)null,
+
+                AbsoluteExpirationRelativeToNow = attribute.AbsoluteExpirationRelativeToNow > int.MinValue
+                                                  ? TimeSpan.FromSeconds(attribute.AbsoluteExpirationRelativeToNow)
+                                                  : (TimeSpan?)null,
+
                 Priority = attribute.Priority,
-                SlidingExpiration = attribute.SlidingExpiration > int.MinValue ? TimeSpan.FromSeconds(attribute.SlidingExpiration) : (TimeSpan?)null,
-                Size = attribute.Size > long.MinValue ? attribute.Size : (long?)null
+
+                SlidingExpiration = attribute.SlidingExpiration > int.MinValue
+                                    ? TimeSpan.FromSeconds(attribute.SlidingExpiration)
+                                    : (TimeSpan?)null,
+
+                Size = attribute.Size > long.MinValue
+                       ? attribute.Size
+                       : (long?)null
             };
+        }
+
+        private byte[] GetRequestBodyData(HttpContext context)
+        {
+            context.Request.EnableRewind();
+            context.Request.Body.Position = 0;
+
+            var buffer = new byte[(int)context.Request.ContentLength];
+            context.Request.Body.Read(buffer, 0, (int)context.Request.ContentLength);
+
+            context.Request.Body.Position = 0;
+
+            return buffer;
         }
 
         public async Task Invoke(HttpContext context)
@@ -133,7 +188,7 @@ namespace CacheMiddleware
 
         private async Task InvokeCached(HttpContext context, CacheAttribute attribute)
         {
-            var key = context.Request.Path;
+            var key = GetKey(context);
 
             if (IsClearCacheAction(context, attribute))
             {
