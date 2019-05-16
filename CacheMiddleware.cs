@@ -65,7 +65,7 @@ namespace CacheMiddleware
         {
             if (routeData != null)
             {
-                var controller = GetControllerFromRouteDAta(routeData);
+                var controller = GetControllerFromRouteData(routeData);
                 var method = GetMethodFromRouteData(routeData, controller);
 
                 var attribute = controller.GetCustomAttribute<CacheAttribute>();
@@ -75,7 +75,7 @@ namespace CacheMiddleware
             return null;
         }
 
-        private Type GetControllerFromRouteDAta(RouteData routeData)
+        private Type GetControllerFromRouteData(RouteData routeData)
         {
             if (routeData != null)
             {
