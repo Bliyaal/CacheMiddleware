@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using System;
 
-namespace CacheMiddleware
+namespace Bliyaal.CacheMiddleware
 {
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
     public sealed class CacheAttribute : Attribute

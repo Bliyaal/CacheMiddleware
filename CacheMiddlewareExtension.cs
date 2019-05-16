@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Internal;
 
-namespace CacheMiddleware
+namespace Bliyaal.CacheMiddleware
 {
     public static class CacheMiddlewareExtension
     {
