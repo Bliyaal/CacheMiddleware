@@ -23,8 +23,5 @@ public IActionResult SomeAction()
 }
 ```
 
-## Contributing
-I know this is a public repository but I would like to keep full ownership of the code. Thank you :)
-
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
