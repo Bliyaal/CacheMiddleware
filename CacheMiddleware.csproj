@@ -17,4 +17,8 @@
     <OutputType>Library</OutputType>
     <StartupObject />
   </PropertyGroup>
+
+  <PropertyGroup>
+    <IsPackable>True</IsPackable>
+  </PropertyGroup>
 </Project>
