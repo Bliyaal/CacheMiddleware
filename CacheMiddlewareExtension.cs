@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Internal;
 
 namespace Bliyaal.CacheMiddleware
 {
@@ -7,7 +6,7 @@ namespace Bliyaal.CacheMiddleware
     {
         public static IApplicationBuilder UseCache(this IApplicationBuilder app)
         {
-            return app.UseEndpointRouting()
+            return app.UseRouting()
                       .UseMiddleware<CacheMiddleware>();
         }
     }

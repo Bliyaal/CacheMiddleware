@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Internal;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
 using System;
@@ -52,7 +51,9 @@ namespace Bliyaal.CacheMiddleware
                     var buffer = new byte[Convert.ToInt32(context.Response.Body.Length)];
                     context.Response.Body.Read(buffer, 0, buffer.Length);
 
-                    _cache.Set(key, buffer, GetOptions(attribute));
+                    var options = GetOptions(attribute);
+                    _cache.Set(key, buffer, options);
+                    _cache.Set(GetContentTypeKey(key), context.Response.ContentType, options);
 
                     context.Response.Body.Seek(0, SeekOrigin.Begin);
 
@@ -75,6 +76,11 @@ namespace Bliyaal.CacheMiddleware
             return new CacheAttribute { CacheResult = false };
         }
 
+        private string GetContentTypeKey(string key)
+        {
+            return $"{key}ContentType";
+        }
+
         private Type GetControllerFromRouteData(RouteData routeData)
         {
             if (routeData != null)
@@ -86,7 +92,6 @@ namespace Bliyaal.CacheMiddleware
                 return Assembly.GetEntryAssembly()
                                .GetTypes()
                                .First(t => t.Name.Equals($"{controllerName}Controller"));
-
             }
             return null;
         }
@@ -96,7 +101,7 @@ namespace Bliyaal.CacheMiddleware
             var path = Encoding.UTF8.GetBytes(context.Request.Path);
             var method = Encoding.UTF8.GetBytes(context.Request.Method);
             var body = GetRequestBodyData(context);
-            var uniqueData = new byte[path.Length + method.Length + body?.Length ?? 0];
+            var uniqueData = new byte[path.Length + method.Length + (body?.Length ?? 0)];
 
             path.CopyTo(uniqueData, 0);
             method.CopyTo(uniqueData, path.Length);
@@ -130,7 +135,6 @@ namespace Bliyaal.CacheMiddleware
                 return controller.GetMethods()
                                  .First(m => m.IsPublic
                                         && m.Name.Equals(methodName, StringComparison.CurrentCultureIgnoreCase));
-
             }
             return null;
         }
@@ -161,15 +165,19 @@ namespace Bliyaal.CacheMiddleware
 
         private byte[] GetRequestBodyData(HttpContext context)
         {
-            context.Request.EnableRewind();
-            context.Request.Body.Position = 0;
+            if (context.Request.ContentLength.HasValue)
+            {
+                context.Request.EnableBuffering();
+                context.Request.Body.Position = 0;
 
-            var buffer = new byte[(int)context.Request.ContentLength];
-            context.Request.Body.Read(buffer, 0, (int)context.Request.ContentLength);
+                var buffer = new byte[(int)context.Request.ContentLength];
+                context.Request.Body.Read(buffer, 0, (int)context.Request.ContentLength);
 
-            context.Request.Body.Position = 0;
+                context.Request.Body.Position = 0;
 
-            return buffer;
+                return buffer;
+            }
+            return null;
         }
 
         public async Task Invoke(HttpContext context)
@@ -193,6 +201,7 @@ namespace Bliyaal.CacheMiddleware
             if (IsClearCacheAction(context, attribute))
             {
                 _cache.Remove(key);
+                _cache.Remove(GetContentTypeKey(key));
             }
 
             _cache.TryGetValue(key, out object value);
@@ -203,7 +212,8 @@ namespace Bliyaal.CacheMiddleware
             }
             else
             {
-                await SetResponseFromCache(context, (byte[])value);
+                _cache.TryGetValue(GetContentTypeKey(key), out string contentType);
+                await SetResponseFromCache(context, (byte[])value, contentType);
             }
         }
 
@@ -239,8 +249,18 @@ namespace Bliyaal.CacheMiddleware
                     || context.Request.Method.Equals("DELETE", StringComparison.CurrentCultureIgnoreCase);
         }
 
-        private async Task SetResponseFromCache(HttpContext context, byte[] value)
+        private async Task SetResponseFromCache(HttpContext context, byte[] value, string contentType)
         {
+            if (!string.IsNullOrWhiteSpace(contentType))
+            {
+                context.Response.OnStarting(state =>
+                {
+                    var httpContext = (HttpContext)state;
+                    httpContext.Response.Headers.Add("Content-Type", contentType);
+                    return Task.CompletedTask;
+                }, context);
+            }
+
             var originalBodyStream = context.Response.Body;
 
             using (var responseBody = new MemoryStream())
@@ -254,6 +274,5 @@ namespace Bliyaal.CacheMiddleware
                 await responseBody.CopyToAsync(originalBodyStream);
             }
         }
-
     }
 }
